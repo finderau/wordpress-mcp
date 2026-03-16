@@ -10,6 +10,10 @@ import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
 const DEFAULT_DB_PATH = process.env.WP_BACKUP_DB_PATH || './data/wp-backups.db';
+// Keep backups for 90 days by default; configurable via env
+const RETENTION_DAYS = parseInt(process.env.WP_BACKUP_RETENTION_DAYS || '90', 10);
+// Maximum number of backups to keep (hard cap)
+const MAX_BACKUPS = parseInt(process.env.WP_BACKUP_MAX_COUNT || '10000', 10);
 
 export class BackupStore {
   constructor(dbPath = DEFAULT_DB_PATH) {
@@ -22,6 +26,7 @@ export class BackupStore {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this._migrate();
+    this._pruneOldBackups();
   }
 
   _migrate() {
@@ -46,6 +51,30 @@ export class BackupStore {
       CREATE INDEX IF NOT EXISTS idx_backups_created_at
         ON backups(created_at);
     `);
+  }
+
+  /**
+   * Remove backups older than RETENTION_DAYS and enforce MAX_BACKUPS cap.
+   * Called on startup and periodically via checkpoint().
+   */
+  _pruneOldBackups() {
+    // Delete by age
+    this.db.prepare(
+      `DELETE FROM backups WHERE created_at < datetime('now', '-' || ? || ' days')`
+    ).run(RETENTION_DAYS);
+
+    // Enforce hard count cap — keep newest MAX_BACKUPS rows
+    this.db.prepare(
+      `DELETE FROM backups WHERE id NOT IN (SELECT id FROM backups ORDER BY id DESC LIMIT ?)`
+    ).run(MAX_BACKUPS);
+  }
+
+  /**
+   * Checkpoint WAL and prune old backups. Call periodically for long-running processes.
+   */
+  checkpoint() {
+    this._pruneOldBackups();
+    this.db.pragma('wal_checkpoint(TRUNCATE)');
   }
 
   /**
@@ -115,7 +144,7 @@ export class BackupStore {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    params.push(Math.min(limit, 200));
+    params.push(Math.max(1, Math.min(limit, 200)));
 
     const rows = this.db.prepare(
       `SELECT id, object_type, object_id, action, changed_by, change_summary, wp_site, created_at, restored_at, restored_by
@@ -136,5 +165,12 @@ export class BackupStore {
     this.db.prepare(
       `UPDATE backups SET restored_at = datetime('now'), restored_by = ? WHERE id = ?`
     ).run(restoredBy, id);
+  }
+
+  /**
+   * Close the database connection cleanly (flushes WAL).
+   */
+  close() {
+    this.db.close();
   }
 }

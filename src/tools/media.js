@@ -57,10 +57,17 @@ export const MEDIA_TOOLS = [
   },
 ];
 
+function clampPagination(perPage, page) {
+  const pp = Math.max(1, Math.min(Number(perPage) || 20, 100));
+  const pg = Math.max(1, Number(page) || 1);
+  return { perPage: pp, page: pg };
+}
+
 export async function handleListMedia(client, args) {
+  const { perPage, page } = clampPagination(args.per_page, args.page);
   const params = new URLSearchParams();
-  params.set('per_page', String(Math.min(args.per_page || 20, 100)));
-  params.set('page', String(args.page || 1));
+  params.set('per_page', String(perPage));
+  params.set('page', String(page));
   if (args.search) params.set('search', args.search);
   if (args.media_type) params.set('media_type', args.media_type);
 
@@ -81,6 +88,12 @@ export async function handleListMedia(client, args) {
 }
 
 export async function handleUploadMedia(client, args) {
+  // Early size check on base64 string to avoid allocating huge buffers.
+  // 10MB file ≈ 13.4MB base64. Reject anything clearly over the limit.
+  const MAX_BASE64_LENGTH = 14 * 1024 * 1024;
+  if (args.content_base64.length > MAX_BASE64_LENGTH) {
+    throw new Error(`File too large. Base64 input exceeds ${MAX_BASE64_LENGTH} bytes (max file size: 10MB)`);
+  }
   const fileBuffer = Buffer.from(args.content_base64, 'base64');
   const meta = {};
   if (args.title) meta.title = args.title;
@@ -99,8 +112,17 @@ export async function handleUploadMedia(client, args) {
   };
 }
 
+// Intentionally duplicated in posts.js and changes.js to keep tool files self-contained
+function requirePositiveInt(value, name) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return n;
+}
+
 export async function handleDeleteMedia(client, backupStore, args, userEmail, site) {
-  const { id } = args;
+  const id = requirePositiveInt(args.id, 'id');
 
   // 1. Snapshot current state (metadata only — can't back up the actual file)
   const current = await client.get(`/media/${id}?context=edit`);

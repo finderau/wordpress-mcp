@@ -16,12 +16,12 @@ MCP server that wraps the WordPress REST API with **backup-before-change** and *
 |------|-------------|
 | `wp_list_posts` | List/search posts or pages |
 | `wp_get_post` | Get a single post/page with full content |
-| `wp_list_revisions` | List WordPress native revisions |
-| `wp_create_post` | Create a new post/page |
+| `wp_list_revisions` | List WordPress native revisions for a post/page |
+| `wp_create_post` | Create a new post/page (defaults to draft) |
 | `wp_update_post` | Update a post/page (auto-backup) |
 | `wp_delete_post` | Trash or delete a post/page (auto-backup) |
 | `wp_list_media` | List media library items |
-| `wp_upload_media` | Upload a file to media library |
+| `wp_upload_media` | Upload a file to media library (10MB limit) |
 | `wp_delete_media` | Delete media (auto-backup of metadata) |
 | `wp_get_categories` | List categories |
 | `wp_get_tags` | List tags |

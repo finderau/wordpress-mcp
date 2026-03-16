@@ -63,8 +63,10 @@ class WordPressMCPServer {
 
         // For wp_restore without explicit site, build client from the backup's stored site
         if (name === 'wp_restore' && !client) {
-          const backup = this.backupStore.getBackup(cleanArgs.backup_id);
-          if (!backup) throw new Error(`Backup ${cleanArgs.backup_id} not found`);
+          const bid = Number(cleanArgs.backup_id);
+          if (!Number.isInteger(bid) || bid <= 0) throw new Error('backup_id must be a positive integer');
+          const backup = this.backupStore.getBackup(bid);
+          if (!backup) throw new Error('Backup not found');
           const backupSite = backup.wp_site;
           siteConfig = getSiteConfig(backupSite);
           const siteCreds = getSiteCredentials(backupSite, credentials);
@@ -90,6 +92,21 @@ class WordPressMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('WordPress MCP server running on stdio');
+
+    // Periodic WAL checkpoint and backup pruning (every 30 minutes)
+    this._checkpointInterval = setInterval(() => {
+      try { this.backupStore.checkpoint(); } catch { /* non-fatal */ }
+    }, 30 * 60 * 1000);
+    this._checkpointInterval.unref(); // Don't keep the process alive just for this
+
+    // Clean shutdown — flush WAL on exit
+    const shutdown = () => {
+      clearInterval(this._checkpointInterval);
+      try { this.backupStore.close(); } catch { /* already closed */ }
+    };
+    process.on('exit', shutdown);
+    process.on('SIGINT', () => { shutdown(); process.exit(0); });
+    process.on('SIGTERM', () => { shutdown(); process.exit(0); });
   }
 }
 

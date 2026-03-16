@@ -123,19 +123,35 @@ export const POST_TOOLS = [
 
 const VALID_POST_TYPES = ['posts', 'pages'];
 
+// Intentionally duplicated in media.js and changes.js to keep tool files self-contained
+function requirePositiveInt(value, name) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return n;
+}
+
 function resolvePostType(args) {
   const type = args.post_type || 'posts';
   if (!VALID_POST_TYPES.includes(type)) {
-    throw new Error(`Invalid post_type "${type}". Must be one of: ${VALID_POST_TYPES.join(', ')}`);
+    throw new Error(`Invalid post_type — must be one of: ${VALID_POST_TYPES.join(', ')}`);
   }
   return type;
 }
 
+function clampPagination(perPage, page) {
+  const pp = Math.max(1, Math.min(Number(perPage) || 20, 100));
+  const pg = Math.max(1, Number(page) || 1);
+  return { perPage: pp, page: pg };
+}
+
 export async function handleListPosts(client, args) {
   const type = resolvePostType(args);
+  const { perPage, page } = clampPagination(args.per_page, args.page);
   const params = new URLSearchParams();
-  params.set('per_page', String(Math.min(args.per_page || 20, 100)));
-  params.set('page', String(args.page || 1));
+  params.set('per_page', String(perPage));
+  params.set('page', String(page));
   params.set('context', 'edit');
   if (args.status) params.set('status', args.status);
   else params.set('status', 'any');
@@ -161,14 +177,16 @@ export async function handleListPosts(client, args) {
 
 export async function handleGetPost(client, args) {
   const type = resolvePostType(args);
-  return client.get(`/${type}/${args.id}?context=edit`);
+  const id = requirePositiveInt(args.id, 'id');
+  return client.get(`/${type}/${id}?context=edit`);
 }
 
 export async function handleListRevisions(client, args) {
   const type = resolvePostType(args);
-  const revisions = await client.get(`/${type}/${args.post_id}/revisions`);
+  const postId = requirePositiveInt(args.post_id, 'post_id');
+  const revisions = await client.get(`/${type}/${postId}/revisions`);
   return {
-    post_id: args.post_id,
+    post_id: postId,
     count: revisions.length,
     revisions: revisions.map(r => ({
       id: r.id,
@@ -180,7 +198,7 @@ export async function handleListRevisions(client, args) {
   };
 }
 
-export async function handleCreatePost(client, args) {
+export async function handleCreatePost(client, backupStore, args, userEmail, site) {
   const type = resolvePostType(args);
   const body = {};
   for (const field of WRITABLE_POST_FIELDS) {
@@ -189,18 +207,32 @@ export async function handleCreatePost(client, args) {
   if (!body.status) body.status = 'draft';
 
   const created = await client.post(`/${type}`, body);
+
+  // Audit trail: log the creation (snapshot is the newly created object)
+  const backupId = backupStore.createBackup({
+    objectType: type === 'pages' ? 'page' : 'post',
+    objectId: created.id,
+    snapshot: created,
+    action: 'create',
+    changedBy: userEmail || 'unknown',
+    changeSummary: `Created ${type === 'pages' ? 'page' : 'post'} "${created.title?.raw || created.title?.rendered || 'untitled'}" (status: ${created.status})`,
+    wpSite: site,
+  });
+
   return {
     id: created.id,
     title: created.title?.raw || created.title?.rendered,
     status: created.status,
     link: created.link,
+    backup_id: backupId,
     message: `Post created successfully (ID: ${created.id}, status: ${created.status})`,
   };
 }
 
 export async function handleUpdatePost(client, backupStore, args, userEmail, site) {
   const type = resolvePostType(args);
-  const { id, ...updateFields } = args;
+  const id = requirePositiveInt(args.id, 'id');
+  const { id: _id, ...updateFields } = args;
   delete updateFields.site;
   delete updateFields.post_type;
 
@@ -238,7 +270,7 @@ export async function handleUpdatePost(client, backupStore, args, userEmail, sit
 
 export async function handleDeletePost(client, backupStore, args, userEmail, site) {
   const type = resolvePostType(args);
-  const { id } = args;
+  const id = requirePositiveInt(args.id, 'id');
 
   // 1. Snapshot current state
   const current = await client.get(`/${type}/${id}?context=edit`);

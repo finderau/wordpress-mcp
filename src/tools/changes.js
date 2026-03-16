@@ -17,6 +17,13 @@ const WRITABLE_FIELDS = {
   media: ['title', 'alt_text', 'caption', 'description'],
 };
 
+// Meta keys that must never be written via restore (WordPress internal/security-sensitive)
+const BLOCKED_META_KEYS = [
+  '_wp_page_template', '_wp_attached_file', '_wp_attachment_metadata',
+  '_edit_lock', '_edit_last', '_wp_trash_meta_status', '_wp_trash_meta_time',
+  '_wp_old_slug', '_wp_old_date',
+];
+
 // Map object_type back to WP REST API endpoint
 const TYPE_TO_ENDPOINT = {
   post: '/posts',
@@ -85,10 +92,20 @@ export async function handleListChanges(backupStore, args) {
   };
 }
 
+// Intentionally duplicated in posts.js and media.js to keep tool files self-contained
+function requirePositiveInt(value, name) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return n;
+}
+
 export async function handleRestore(client, backupStore, args, userEmail, site) {
-  const backup = backupStore.getBackup(args.backup_id);
+  const backupId = requirePositiveInt(args.backup_id, 'backup_id');
+  const backup = backupStore.getBackup(backupId);
   if (!backup) {
-    throw new Error(`Backup ${args.backup_id} not found`);
+    throw new Error('Backup not found');
   }
 
   const objectType = backup.object_type;
@@ -133,6 +150,13 @@ export async function handleRestore(client, backupStore, args, userEmail, site) 
       // Handle WP's { raw, rendered } format
       if (typeof value === 'object' && value !== null && 'raw' in value) {
         restoreBody[key] = value.raw;
+      } else if (key === 'meta' && typeof value === 'object' && value !== null) {
+        // Strip dangerous internal meta keys
+        const safeMeta = { ...value };
+        for (const blocked of BLOCKED_META_KEYS) {
+          delete safeMeta[blocked];
+        }
+        restoreBody[key] = safeMeta;
       } else {
         restoreBody[key] = value;
       }

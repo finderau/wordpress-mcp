@@ -37,7 +37,7 @@ export const TAXONOMY_TOOLS = [
 
 export async function handleGetCategories(client, args) {
   const params = new URLSearchParams();
-  params.set('per_page', String(Math.min(args.per_page || 100, 100)));
+  params.set('per_page', String(Math.max(1, Math.min(Number(args.per_page) || 100, 100))));
   if (args.search) params.set('search', args.search);
 
   const categories = await client.get(`/categories?${params.toString()}`);
@@ -56,7 +56,7 @@ export async function handleGetCategories(client, args) {
 
 export async function handleGetTags(client, args) {
   const params = new URLSearchParams();
-  params.set('per_page', String(Math.min(args.per_page || 100, 100)));
+  params.set('per_page', String(Math.max(1, Math.min(Number(args.per_page) || 100, 100))));
   if (args.search) params.set('search', args.search);
 
   const tags = await client.get(`/tags?${params.toString()}`);

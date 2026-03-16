@@ -45,7 +45,7 @@ export async function handleToolCall(name, args, client, backupStore, userEmail,
       result = await handleListRevisions(client, args);
       break;
     case 'wp_create_post':
-      result = await handleCreatePost(client, args);
+      result = await handleCreatePost(client, backupStore, args, userEmail, site);
       break;
     case 'wp_update_post':
       result = await handleUpdatePost(client, backupStore, args, userEmail, site);
