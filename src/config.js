@@ -16,13 +16,25 @@ const SITES = {
     multisite: false,
     credentialPrefix: 'WP_FINDER_COM_AU_PROD',
   },
-  // QA sites don't support Application Passwords — uncomment when resolved
-  // 'finder-com-au-qa1': {
-  //   label: 'finder.com.au QA1',
-  //   baseUrl: 'https://site-fca.qa01.au-se1.gcp.finder.com',
-  //   multisite: false,
-  //   credentialPrefix: 'WP_FINDER_COM_AU_QA1',
-  // },
+  'finder-com-prod': {
+    label: 'finder.com Production',
+    baseUrl: 'https://www.finder.com',
+    multisite: false,
+    credentialPrefix: 'WP_FINDER_COM_PROD',
+  },
+  // QA sites — Application Passwords support pending
+  'finder-com-au-qa1': {
+    label: 'finder.com.au QA1',
+    baseUrl: 'https://site-fca.qa01.au-se1.gcp.finder.com',
+    multisite: false,
+    credentialPrefix: 'WP_FINDER_COM_AU_QA1',
+  },
+  'finder-com-au-qa2': {
+    label: 'finder.com.au QA2',
+    baseUrl: 'https://site-fca.qa02.au-se1.gcp.finder.com',
+    multisite: false,
+    credentialPrefix: 'WP_FINDER_COM_AU_QA2',
+  },
 };
 
 /**
@@ -33,7 +45,7 @@ const SITES = {
 export function getSiteConfig(siteSlug) {
   const site = SITES[siteSlug];
   if (!site) {
-    throw new Error(`Unknown site: "${siteSlug}". Valid sites: ${Object.keys(SITES).join(', ')}`);
+    throw new Error('Unknown site — check the site parameter is valid');
   }
   return site;
 }
@@ -52,10 +64,7 @@ export function getSiteCredentials(siteSlug, credentials) {
   const appPassword = credentials[`${prefix}_APP_PASSWORD`];
 
   if (!user || !appPassword) {
-    throw new Error(
-      `Missing credentials for site "${siteSlug}". ` +
-      `Set ${prefix}_USER and ${prefix}_APP_PASSWORD environment variables.`
-    );
+    throw new Error(`Missing credentials for site "${siteSlug}"`);
   }
 
   return { user, appPassword };
