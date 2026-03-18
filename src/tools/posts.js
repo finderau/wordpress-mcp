@@ -41,7 +41,7 @@ export const POST_TOOLS = [
   },
   {
     name: 'wp_get_post',
-    description: 'Get a single WordPress post or page by ID, including full content, meta, and taxonomy terms.',
+    description: 'Get a single WordPress post or page by ID, including full content, meta, and taxonomy terms. NOTE: The following finder.com.au fields are stored in wp_postmeta but NOT registered with show_in_rest, so they are NOT included in the response: post_co_author, post_reviewer, post_editor, post_is_fact_checked, post_last_major_update_reason (unconfirmed key), select2-acf-fielld_attribution_category, post_status_code_410, table_shortcode, masthead-subheading-meta-box-clone. These require show_in_rest registration on the WordPress side to become accessible via the REST API.',
     inputSchema: {
       type: 'object',
       properties: {
