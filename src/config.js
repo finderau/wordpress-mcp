@@ -25,7 +25,7 @@ const SITES = {
   // QA sites — Application Passwords support pending
   'finder-com-au-qa1': {
     label: 'finder.com.au QA1',
-    baseUrl: 'https://site-fca.qa01.au-se1.gcp.finder.com',
+    baseUrl: 'https://site-fin.qa01.au-se1.gcp.finder.com',
     multisite: false,
     credentialPrefix: 'WP_FINDER_COM_AU_QA1',
   },
