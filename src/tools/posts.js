@@ -41,13 +41,14 @@ export const POST_TOOLS = [
   },
   {
     name: 'wp_get_post',
-    description: 'Get a single WordPress post or page by ID, including full content, meta, and taxonomy terms. NOTE: The following finder.com.au fields are stored in wp_postmeta but NOT registered with show_in_rest, so they are NOT included in the response: post_co_author, post_reviewer, post_editor, post_is_fact_checked, post_last_major_update_reason (unconfirmed key), select2-acf-fielld_attribution_category, post_status_code_410, table_shortcode, masthead-subheading-meta-box-clone. These require show_in_rest registration on the WordPress side to become accessible via the REST API.',
+    description: 'Get a single WordPress post or page by ID. Set include_content=false to get metadata only (title, status, categories, tags, meta fields) — this saves significant tokens when you don\'t need the full HTML content. NOTE: The following finder.com.au fields are stored in wp_postmeta but NOT registered with show_in_rest, so they are NOT included in the response: post_co_author, post_reviewer, post_editor, post_is_fact_checked, post_last_major_update_reason (unconfirmed key), select2-acf-fielld_attribution_category, post_status_code_410, table_shortcode, masthead-subheading-meta-box-clone. These require show_in_rest registration on the WordPress side to become accessible via the REST API.',
     inputSchema: {
       type: 'object',
       properties: {
         site: { type: 'string', enum: siteEnum, description: 'Target WordPress site' },
         id: { type: 'number', description: 'Post/page ID' },
         post_type: { type: 'string', description: 'Post type: "posts" or "pages" (default: "posts")' },
+        include_content: { type: 'boolean', description: 'Include full post content and excerpt in response. Set to false when you only need metadata, categories, tags, and meta fields (saves significant context). Default: true.' },
       },
       required: ['site', 'id'],
     },
@@ -123,6 +124,58 @@ export const POST_TOOLS = [
 
 const VALID_POST_TYPES = ['posts', 'pages'];
 
+// Fields to return in the compact summary (always included regardless of include_content)
+const SUMMARY_FIELDS = [
+  'id', 'title', 'status', 'date', 'modified', 'slug', 'link',
+  'author', 'featured_media', 'categories', 'tags', 'meta',
+  'template', 'format', 'comment_status', 'ping_status', 'sticky',
+];
+
+// Fields to request via _fields when content is excluded (avoids downloading HTML over the wire)
+const METADATA_FIELDS = [
+  ...SUMMARY_FIELDS.filter(f => f !== 'title'), // title needs special handling (object vs string)
+  'title', 'excerpt',
+].join(',');
+
+/**
+ * Build a compact post summary, stripping _links, guid, and other noise.
+ * Follows the summariseComment() pattern from comments.js.
+ */
+function summarisePost(p, includeContent = true) {
+  const summary = {
+    id: p.id,
+    title: p.title?.raw || p.title?.rendered || p.title,
+    status: p.status,
+    date: p.date,
+    modified: p.modified,
+    slug: p.slug,
+    link: p.link,
+    author: p.author,
+    featured_media: p.featured_media,
+    categories: p.categories,
+    tags: p.tags,
+    meta: p.meta,
+    template: p.template,
+    format: p.format,
+    comment_status: p.comment_status,
+    ping_status: p.ping_status,
+    sticky: p.sticky,
+  };
+
+  if (includeContent) {
+    summary.content = p.content?.raw || p.content?.rendered || p.content;
+    summary.excerpt = p.excerpt?.raw || p.excerpt?.rendered || p.excerpt;
+  } else {
+    // Truncated excerpt gives topic context without full content
+    const excerptRaw = p.excerpt?.raw || p.excerpt?.rendered || '';
+    summary.excerpt = excerptRaw.length > 500
+      ? excerptRaw.substring(0, 500) + '...'
+      : excerptRaw;
+  }
+
+  return summary;
+}
+
 // Intentionally duplicated in media.js and changes.js to keep tool files self-contained
 function requirePositiveInt(value, name) {
   const n = Number(value);
@@ -178,7 +231,15 @@ export async function handleListPosts(client, args) {
 export async function handleGetPost(client, args) {
   const type = resolvePostType(args);
   const id = requirePositiveInt(args.id, 'id');
-  return client.get(`/${type}/${id}?context=edit`);
+  const includeContent = args.include_content !== false;
+
+  if (includeContent) {
+    const post = await client.get(`/${type}/${id}?context=edit`);
+    return summarisePost(post, true);
+  }
+  // Metadata-only: use _fields to avoid downloading HTML over the wire
+  const post = await client.get(`/${type}/${id}?context=edit&_fields=${METADATA_FIELDS}`);
+  return summarisePost(post, false);
 }
 
 export async function handleListRevisions(client, args) {
