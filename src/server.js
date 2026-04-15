@@ -55,7 +55,7 @@ class WordPressMCPServer {
             siteConfig.baseUrl,
             siteCreds.user,
             siteCreds.appPassword,
-            { pathPrefix: siteConfig.pathPrefix || '' }
+            { pathPrefix: siteConfig.pathPrefix || '', onBehalfOf: userEmail }
           );
         } else if (!siteOptionalTools.includes(name)) {
           throw new Error('site parameter is required');
@@ -74,7 +74,7 @@ class WordPressMCPServer {
             siteConfig.baseUrl,
             siteCreds.user,
             siteCreds.appPassword,
-            { pathPrefix: siteConfig.pathPrefix || '' }
+            { pathPrefix: siteConfig.pathPrefix || '', onBehalfOf: userEmail }
           );
         }
 
