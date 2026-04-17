@@ -59,6 +59,7 @@ export class WordPressClient {
     this.baseUrl = cleanUrl;
     this.authHeader = 'Basic ' + Buffer.from(`${username}:${appPassword}`).toString('base64');
     this.pathPrefix = options.pathPrefix || '';
+    this.onBehalfOf = options.onBehalfOf || null;
   }
 
   /**
@@ -77,6 +78,10 @@ export class WordPressClient {
       'Accept': 'application/json',
       ...extraHeaders,
     };
+
+    if (this.onBehalfOf) {
+      headers['X-On-Behalf-Of'] = this.onBehalfOf;
+    }
 
     if (body && method !== 'GET') {
       headers['Content-Type'] = 'application/json';
